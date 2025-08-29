@@ -228,6 +228,76 @@
     - { path: /root/.bash_history }
     - { path: "/home/{{ ansible_env.SUDO_USER | default(ansible_user_id) }}/.bash_history" }
 
+- name: Create user stack
+  shell: |
+    useradd -d /home/stack -m -s /bin/bash stack
+    usermod -a -G sudo stack
+    printf "stack:stack123" | chpasswd
+
+- name: Apply customization to stack user
+  shell: |
+    echo "source <(kubectl completion bash)" >> /home/stack/.bashrc
+    echo "alias k=kubectl" >> /home/stack/.bashrc
+    echo "complete -o default -F __start_kubectl k" >> /home/stack/.bashrc
+
+- name: Remove top-level packages
+  vars:
+    top_level_packages:
+      - build-essential
+      - g++
+      - g++-11
+      - landscape-common
+      - ubuntu-standard
+      - ubuntu-server
+      - dpkg-dev
+      - gcc
+      - gcc-11
+      - ubuntu-minimal
+      - byobu
+      - update-notifier-common
+  ansible.builtin.apt:
+    name: "{{ top_level_packages }}"
+    state: absent
+    allow_change_held_packages: yes
+  ignore_errors: yes
+
+- name: Remove low-level packages
+  vars:
+    low_level_packages:
+      - bc
+      - ftp
+      - info
+      - btrfs-progs
+      - sosreport
+      - man-db
+      - manpages
+      - manpages-dev
+      - git
+      - git-man
+      - make
+      - cpp
+      - cpp-11
+      - htop
+      - rsync
+      - bash-completion
+      - screen
+      - fonts-ubuntu-console
+      - xdg-user-dirs
+      - unattended-upgrades
+      - ubuntu-pro-client-l10n
+      - update-manager-core
+      - ubuntu-advantage-tools
+      - ubuntu-pro-client
+  ansible.builtin.apt:
+    name: "{{ low_level_packages }}"
+    state: absent
+    allow_change_held_packages: yes
+  ignore_errors: yes
+
+- name: Apply Vulnerability fixes for 22.04
+  include_tasks: remediate_vuln_2204.yml
+  when: ansible_distribution_version is version('22.04', '>=')
+
 - name: Rotate journalctl to archive logs
   ansible.builtin.shell:
     cmd: |

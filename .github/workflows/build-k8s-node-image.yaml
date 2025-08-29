@@ -1,4 +1,4 @@
-name: build_image_test
+name: build_image
 
 on:
   workflow_dispatch:
@@ -106,9 +106,9 @@ jobs:
           #fi
 
 
-          #- name: Scan the image for vulenarability and upload to minio
-          #run: |
-          #cd image-builder/images/capi/output/
-          #file=$(ls -l | grep ^d|awk '{print $9}')
-          #mc cp ${file}.gz myminio/images
-          #rm -rf $file ${file}.gz
+      - name: Remove the build image
+        run: |
+          cd images/capi/output/
+          ls -lh 
+          echo "Removing the Build Image"
+          rm -rf *

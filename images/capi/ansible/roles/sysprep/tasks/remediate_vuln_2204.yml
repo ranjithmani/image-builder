@@ -1,0 +1,22 @@
+- name: Disable weak ssh macs
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    line: macs umac-128-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,umac-128@openssh.com,hmac-sha2-256,hmac-sha2-512
+    state: present
+
+
+- name: Disable ICMP redirects for all interfaces
+  copy:
+    dest: /etc/sysctl.d/99-k8s-hardening.conf
+    content: |
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv4.conf.default.accept_redirects = 0
+      net.ipv4.conf.all.secure_redirects = 0
+      net.ipv4.conf.default.secure_redirects = 0
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Reload sysctl settings
+  command: sysctl --system
+  changed_when: false
