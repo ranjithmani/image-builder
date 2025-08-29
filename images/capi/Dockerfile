@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.4
+
 # Copyright 2020 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +61,6 @@ ENV PACKER_ARGS=''
 ENV PACKER_VAR_FILES=''
 ENV IB_VERSION="${PASSED_IB_VERSION}"
 
-RUN --mount=type=secret,id=packer-github-token,env=PACKER_GITHUB_API_TOKEN \
-	make deps
+RUN make deps
 
 ENTRYPOINT [ "/usr/bin/make" ]
