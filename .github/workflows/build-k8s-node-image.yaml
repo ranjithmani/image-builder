@@ -111,4 +111,4 @@ jobs:
           cd images/capi/output/
           ls -lh 
           echo "Removing the Build Image"
-          rm -rf *
+          #rm -rf *
