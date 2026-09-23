@@ -55,7 +55,10 @@
     },
     {
       "ansible_env_vars": [
-        "ANSIBLE_SSH_ARGS='{{user `existing_ansible_ssh_args`}} {{user `ansible_common_ssh_args`}}'"
+        "ANSIBLE_SSH_ARGS='{{user `existing_ansible_ssh_args`}} {{user `ansible_common_ssh_args`}}'",
+        "ANSIBLE_TIMEOUT={{user `ansible_timeout`}}",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATH={{user `ansible_collections_path`}}{{end}}",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATHS={{user `ansible_collections_path`}}{{end}}"
       ],
       "extra_arguments": [
         "--scp-extra-args",
@@ -67,6 +70,7 @@
         "--extra-vars",
         "{{user `ansible_user_vars`}}"
       ],
+      "max_retries": 5,
       "playbook_file": "./ansible/node.yml",
       "type": "ansible",
       "user": "core"
@@ -93,8 +97,10 @@
         "OS": "{{user `distro_name` | lower}}",
         "OS_VERSION": "{{user `os_version`}}",
         "PROVIDER": "openstack",
+        "containerd_enable_limit_no_file": "{{user `containerd_enable_limit_no_file`}}",
         "containerd_gvisor_runtime": "{{user `containerd_gvisor_runtime`}}",
         "containerd_gvisor_version": "{{user `containerd_gvisor_version`}}",
+        "containerd_image_pull_progress_timeout": "{{user `containerd_image_pull_progress_timeout`}}",
         "containerd_version": "{{user `containerd_version`}}",
         "kubernetes_cni_deb_version": "{{ user `kubernetes_cni_deb_version` }}",
         "kubernetes_cni_rpm_version": "{{ split (user `kubernetes_cni_rpm_version`) \"-\" 0 }}",
@@ -109,18 +115,23 @@
     }
   ],
   "variables": {
+    "ansible_collections_path": "",
     "ansible_common_vars": "ansible_python_interpreter=/usr/bin/python3",
     "ansible_extra_vars": "",
+    "ansible_timeout": "60",
     "ansible_user_vars": "",
     "attach_config_drive": "false",
     "build_timestamp": "{{timestamp}}",
+    "containerd_enable_limit_no_file": "false",
     "containerd_gvisor_runtime": "false",
     "containerd_gvisor_version": "latest",
-    "containerd_service_url": "https://raw.githubusercontent.com/containerd/containerd/refs/tags/v{{user `containerd_version`}}/containerd.service",
+    "containerd_image_pull_progress_timeout": null,
+    "containerd_service_url": "",
     "containerd_version": null,
     "crictl_version": null,
     "existing_ansible_ssh_args": "{{env `ANSIBLE_SSH_ARGS`}}",
     "floating_ip_network": "public",
+    "ib_version": "{{env `IB_VERSION`}}",
     "image_disk_format": "qcow2",
     "image_name": "{{user `build_name`}}-kube-{{user `kubernetes_semver`}}",
     "image_tags": "k8s,capi",

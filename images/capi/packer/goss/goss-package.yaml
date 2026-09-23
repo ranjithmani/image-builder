@@ -56,6 +56,16 @@ package:
     {{$key}}: {{$val}}
   {{end}}
 {{end}}
+# x86-only provider packages (hypervisor tools not available on arm64)
+{{if ne .Vars.ARCH "arm64"}}
+{{range $name, $vers := index .Vars .Vars.OS .Vars.PROVIDER "package-x86"}}
+  {{$name}}:
+    installed: true
+  {{range $key, $val := $vers}}
+    {{$key}}: {{$val}}
+  {{end}}
+{{end}}
+{{end}}
 
 # Iterate thru different OS Versions like RHEL7/8, Photon 3/4(future) etc.
 {{$distro_version := .Vars.OS_VERSION}}
@@ -75,6 +85,12 @@ package:
 
 {{ if eq .Vars.OS "windows"}} # Windows
 # Workaround until windows features are added to goss
+# The first Get-WindowsFeature call after boot is slow on Windows Server 2025:
+# in CI it usually takes 60-140s and has been observed to take over 300s,
+# while every later call takes about 1s. Keep this timeout well above that
+# tail. It must also stay larger than goss_retry_timeout (goss-args.json):
+# once a single command times out, goss has already used up its retry budget
+# and does not run a second pass.
 command:
 {{range $name, $vers := index .Vars .Vars.OS "common-windows-features"}}
   "Windows Feature - {{ $name }}":
@@ -82,7 +98,7 @@ command:
     exit-status: 0
     stdout: {{range $vers.expected}}
     - {{.}}
-    timeout: 60000
+    timeout: 600000
     {{end}}
 {{end}}
 {{end}}

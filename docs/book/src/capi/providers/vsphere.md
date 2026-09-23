@@ -79,12 +79,13 @@ In addition to the configuration found in `images/capi/packer/config`, the `ova`
 |--------------------|--------------------------------------------------------------|
 | `flatcar.json`     | The settings for the Flatcar image                           |
 | `photon-4.json`    | The settings for the Photon 4 image                          |
-| `rhel-8.json`      | The settings for the RHEL 8 image                            |
 | `rhel-9.json`      | The settings for the RHEL 9 image                            |
 | `ubuntu-2204.json` | The settings for the Ubuntu 22.04 image                      |
 | `ubuntu-2204-efi.json` | The settings for the Ubuntu 22.04 EFI image                      |
 | `ubuntu-2404.json` | The settings for the Ubuntu 24.04 image                      |
 | `ubuntu-2404-efi.json` | The settings for the Ubuntu 24.04 EFI image                      |
+| `ubuntu-2604.json` | The settings for the Ubuntu 26.04 image                      |
+| `ubuntu-2604-efi.json` | The settings for the Ubuntu 26.04 EFI image                      |
 | `vsphere.json`     | Additional settings needed when building on a remote vSphere |
 
 ### Photon specific options

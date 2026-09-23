@@ -18,7 +18,8 @@
           "format": "{{user `disk_format`}}",
           "storage_pool": "{{user `storage_pool`}}",
           "storage_pool_type": "{{user `storage_pool_type`}}",
-          "type": "scsi"
+          "type": "{{user `disk_type`}}",
+          "io_thread": "{{user `io_thread`}}"
         }
       ],
       "efi_config": {
@@ -28,6 +29,7 @@
       },
       "scsi_controller": "{{user `scsi_controller`}}",
       "http_directory": "{{user `http_directory`}}",
+      "http_interface": "{{user `http_interface`}}",
       "insecure_skip_tls_verify": true,
       "iso_checksum": "{{user `iso_checksum_type`}}:{{user `iso_checksum`}}",
       "iso_file": "{{user `iso_file`}}",
@@ -37,18 +39,20 @@
       "name": "{{user `build_name`}}",
       "network_adapters": [
         {
+          "model": "{{user `model`}}",
           "bridge": "{{user `bridge`}}",
-          "mtu": "{{ user `mtu` }}",
+          "mtu": "{{user `mtu`}}",
           "vlan_tag": "{{user `vlan_tag`}}"
         }
       ],
-      "node": "{{ user `node` }}",
-      "numa": "{{ user `numa` }}",
+      "node": "{{user `node`}}",
+      "numa": "{{user `numa`}}",
+      "pool": "{{user `pool`}}",
       "sockets": "{{user `sockets`}}",
       "ssh_password": "{{user `ssh_password`}}",
       "ssh_timeout": "2h",
       "ssh_username": "{{user `ssh_username`}}",
-      "template_name": "{{ user `artifact_name` }}",
+      "template_name": "{{user `artifact_name`}}",
       "type": "proxmox-iso",
       "unmount_iso": "{{user `unmount_iso`}}",
       "vm_id": "{{user `vmid`}}"
@@ -154,13 +158,15 @@
         "OS": "{{user `distro_name` | lower}}",
         "OS_VERSION": "{{user `distribution_version` | lower}}",
         "PROVIDER": "qemu",
+        "containerd_enable_limit_no_file": "{{user `containerd_enable_limit_no_file`}}",
+        "containerd_image_pull_progress_timeout": "{{user `containerd_image_pull_progress_timeout`}}",
         "containerd_version": "{{user `containerd_version`}}",
-        "kubernetes_cni_deb_version": "{{ user `kubernetes_cni_deb_version` }}",
-        "kubernetes_cni_rpm_version": "{{ split (user `kubernetes_cni_rpm_version`) \"-\" 0 }}",
+        "kubernetes_cni_deb_version": "{{user `kubernetes_cni_deb_version`}}",
+        "kubernetes_cni_rpm_version": "{{split (user `kubernetes_cni_rpm_version`) \"-\" 0}}",
         "kubernetes_cni_source_type": "{{user `kubernetes_cni_source_type`}}",
         "kubernetes_cni_version": "{{user `kubernetes_cni_semver` | replace \"v\" \"\" 1}}",
-        "kubernetes_deb_version": "{{ user `kubernetes_deb_version` }}",
-        "kubernetes_rpm_version": "{{ split (user `kubernetes_rpm_version`) \"-\" 0  }}",
+        "kubernetes_deb_version": "{{user `kubernetes_deb_version`}}",
+        "kubernetes_rpm_version": "{{split (user `kubernetes_rpm_version`) \"-\" 0}}",
         "kubernetes_source_type": "{{user `kubernetes_source_type`}}",
         "kubernetes_version": "{{user `kubernetes_semver` | replace \"v\" \"\" 1}}"
       },
@@ -186,14 +192,20 @@
     "bridge": "{{env `PROXMOX_BRIDGE`}}",
     "build_timestamp": "{{timestamp}}",
     "containerd_version": null,
-    "containerd_service_url": "https://raw.githubusercontent.com/containerd/containerd/refs/tags/v{{user `containerd_version`}}/containerd.service",
+    "containerd_enable_limit_no_file": "false",
+    "containerd_image_pull_progress_timeout": null,
+    "containerd_service_url": "",
     "runc_version": null,
     "cores": "2",
     "crictl_version": null,
     "disk_format": "qcow2",
     "disk_size": "20G",
+    "disk_type": "scsi",
     "existing_ansible_ssh_args": "{{env `ANSIBLE_SSH_ARGS`}}",
+    "ib_version": "{{env `IB_VERSION`}}",
+    "io_thread": "false",
     "http_directory": "./packer/proxmox/linux/{{user `distro_name`}}/http/",
+    "http_interface": "",
     "iso_storage_pool": "{{env `PROXMOX_ISO_POOL`}}",
     "kubernetes_cni_deb_version": null,
     "kubernetes_cni_http_source": null,
@@ -214,11 +226,13 @@
     "kubernetes_series": null,
     "kubernetes_source_type": null,
     "memory": "2048",
+    "model": "",
     "mtu": "{{env `PROXMOX_MTU`}}",
     "node": "{{env `PROXMOX_NODE`}}",
     "numa": "false",
-    "oem_id": "{{ user `oem_id` }}",
+    "oem_id": "{{user `oem_id`}}",
     "proxmox_url": "{{env `PROXMOX_URL`}}",
+    "pool": "",
     "sockets": "2",
     "ssh_password": "$SSH_PASSWORD",
     "ssh_username": "builder",
@@ -231,3 +245,4 @@
     "scsi_controller": "virtio-scsi-pci"
   }
 }
+

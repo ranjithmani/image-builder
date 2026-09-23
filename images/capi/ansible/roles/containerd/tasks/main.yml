@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- ansible.builtin.import_tasks: debian.yml
-  when: ansible_os_family == "Debian"
+- name: Import Debian containerd tasks
+  ansible.builtin.import_tasks: debian.yml
+  when: ansible_facts['os_family'] == "Debian"
 
-- ansible.builtin.import_tasks: redhat.yml
-  when: ansible_os_family in ["Common Base Linux Mariner", "Microsoft Azure Linux", "RedHat"]
+- name: Import RedHat containerd tasks
+  ansible.builtin.import_tasks: redhat.yml
+  when: ansible_facts['os_family'] in ["Microsoft Azure Linux", "RedHat"]
 
-- ansible.builtin.import_tasks: photon.yml
-  when: ansible_os_family == "VMware Photon OS"
+- name: Import Photon containerd tasks
+  ansible.builtin.import_tasks: photon.yml
+  when: ansible_facts['os_family'] == "VMware Photon OS"
 
 # TODO(vincepri): Use deb/rpm packages once available.
 # See https://github.com/containerd/containerd/issues/1508 for context.
@@ -29,12 +32,45 @@
     checksum: sha256:{{ containerd_url }}.sha256sum
     dest: /tmp/{{ containerd_filename }}
     mode: "0600"
+  register: containerd_download
+  until: containerd_download is not failed
+  retries: 5
+  delay: 3
 
-- name: Download containerd.service
+- name: Download containerd.service from URL
   ansible.builtin.get_url:
     url: "{{ containerd_service_url }}"
     dest: /tmp/containerd.service
     mode: "0600"
+  register: containerd_service_download
+  until: containerd_service_download is not failed
+  retries: 5
+  delay: 3
+  when: containerd_service_url | default("") | length > 0
+
+- name: Fail if containerd_version overrides the bundled service template without a matching containerd_service_url
+  ansible.builtin.fail:
+    msg: >-
+      containerd_version is set to {{ containerd_version }}, but the bundled
+      containerd.service template only supports containerd version pin(s)
+      {{ containerd_service_template_versions | join(', ') }} and
+      containerd_service_url is empty. Set containerd_service_url to a unit
+      file matching
+      {{ containerd_version }} (e.g. a tag under
+      https://raw.githubusercontent.com/containerd/containerd/refs/tags/v{{ containerd_version }}/containerd.service),
+      or run `make update-containerd-service-template` from images/capi after
+      bumping containerd_service_template_versions, to avoid installing a
+      service unit that does not match the selected containerd binary.
+  when:
+    - containerd_service_url | default("") | length == 0
+    - containerd_version not in (containerd_service_template_versions | default([]))
+
+- name: Create containerd.service from template
+  ansible.builtin.template:
+    src: etc/systemd/system/containerd.service
+    dest: /tmp/containerd.service
+    mode: "0600"
+  when: containerd_service_url | default("") | length == 0
 
 - name: Download runc
   ansible.builtin.get_url:
@@ -42,6 +78,10 @@
     checksum: sha256:{{ containerd_runc_checksum_url }}
     dest: /tmp/runc
     mode: "0600"
+  register: containerd_runc_download
+  until: containerd_runc_download is not failed
+  retries: 5
+  delay: 3
 
 - name: Download containerd-wasm-shims
   vars:
@@ -54,6 +94,10 @@
     mode: "0600"
   when: containerd_wasm_shims_runtimes | length > 0
   loop: "{{ containerd_wasm_shims_runtimes | split(',') }}"
+  register: containerd_wasm_shims_download
+  until: containerd_wasm_shims_download is not failed
+  retries: 5
+  delay: 3
 
 - name: Create a directory if it does not exist
   ansible.builtin.file:
@@ -70,14 +114,14 @@
     dest: "{{ containerd_prefix | default('/usr/local') }}"
     extra_opts:
       - --no-overwrite-dir
-  when: ansible_os_family != "Flatcar"
+  when: ansible_facts['os_family'] != "Flatcar"
 
 - name: Copy containerd.service to /etc/systemd/system
   ansible.builtin.copy:
     remote_src: true
     src: /tmp/containerd.service
     dest: /etc/systemd/system/containerd.service
-    mode: "0600"
+    mode: "0644"
 
 - name: Copy runc to /usr/local/sbin
   ansible.builtin.copy:
@@ -85,7 +129,7 @@
     src: /tmp/runc
     dest: /usr/local/sbin/runc
     mode: "0755"
-  when: ansible_os_family != "Flatcar"
+  when: ansible_facts['os_family'] != "Flatcar"
 
 # Install containerd Wasm shims specified in a comma-separated string. Known runtimes are 'lunatic', 'slight', 'spin', and 'wws'.
 - name: Unpack containerd-wasm-shims
@@ -95,7 +139,7 @@
     dest: "{{ sysusr_prefix }}/bin"
     extra_opts:
       - --no-overwrite-dir
-  when: ansible_os_family != "Flatcar" and (containerd_wasm_shims_runtimes | length > 0)
+  when: ansible_facts['os_family'] != "Flatcar" and (containerd_wasm_shims_runtimes | length > 0)
   loop: "{{ containerd_wasm_shims_runtimes | split(',') }}"
 
 - name: Unpack containerd for Flatcar to /opt/bin
@@ -103,7 +147,7 @@
     remote_src: true
     src: /tmp/{{ containerd_filename }}
     dest: "{{ containerd_prefix | default('/opt') }}"
-  when: ansible_os_family == "Flatcar"
+  when: ansible_facts['os_family'] == "Flatcar"
 
 - name: Copy runc to /opt/bin
   ansible.builtin.copy:
@@ -111,7 +155,7 @@
     src: /tmp/runc
     dest: /opt/bin/runc
     mode: "0755"
-  when: ansible_os_family == "Flatcar"
+  when: ansible_facts['os_family'] == "Flatcar"
 
 # Install containerd Wasm shims specified in a comma-separated string. Known runtimes are 'lunatic', 'slight', 'spin', and 'wws'.
 - name: Unpack containerd-wasm-shims for Flatcar to /opt/bin
@@ -121,7 +165,7 @@
     dest: "{{ sysusr_prefix }}/bin"
     extra_opts:
       - --no-overwrite-dir
-  when: ansible_os_family == "Flatcar" and (containerd_wasm_shims_runtimes | length > 0)
+  when: ansible_facts['os_family'] == "Flatcar" and (containerd_wasm_shims_runtimes | length > 0)
   loop: "{{ containerd_wasm_shims_runtimes | split(',') }}"
 
 - name: Create unit file directory
@@ -135,7 +179,7 @@
     dest: /etc/systemd/system/containerd.service.d/10-opt-bin-custom.conf
     src: etc/systemd/system/containerd-flatcar.conf
     mode: "0600"
-  when: ansible_os_family == "Flatcar"
+  when: ansible_facts['os_family'] == "Flatcar"
 
 - name: Create containerd memory pressure drop-in file
   ansible.builtin.template:
@@ -154,7 +198,7 @@
     dest: /etc/systemd/system/containerd.service.d/limit-nofile.conf
     src: etc/systemd/system/containerd.service.d/limit-nofile.conf
     mode: "0644"
-  when: ansible_os_family in ["Common Base Linux Mariner", "Flatcar", "Microsoft Azure Linux"]
+  when: ansible_facts['os_family'] in ["Flatcar", "Microsoft Azure Linux"] or containerd_enable_limit_no_file | bool
 
 - name: Create containerd http proxy conf file if needed
   ansible.builtin.template:
@@ -166,6 +210,12 @@
 - name: Creates containerd config directory
   ansible.builtin.file:
     path: /etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Creates containerd extra config directory
+  ansible.builtin.file:
+    path: /etc/containerd/conf.d
     state: directory
     mode: "0755"
 
@@ -196,6 +246,20 @@
     enabled: true
     state: restarted
 
+- name: Symlink cri-tools
+  ansible.builtin.file:
+    src: /usr/local/bin/{{ item }}
+    dest: /usr/bin/{{ item }}
+    mode: "0755"
+    state: link
+    force: true
+    follow: false
+  loop:
+    - ctr
+    - crictl
+    - critest
+  when: ansible_facts['os_family'] != "Flatcar"
+
 - name: Delete containerd tarball
   ansible.builtin.file:
     path: /tmp/{{ containerd_filename }}
@@ -213,7 +277,7 @@
 
 - name: Delete containerd-wasm-shims tarballs
   ansible.builtin.file:
-    path: /tmp/{{ item }}_wasm_shims.tar.gz
+    path: /tmp/{{ item }}_wasm_shim.tar.gz
     state: absent
   when: containerd_wasm_shims_runtimes | length > 0
   loop: "{{ containerd_wasm_shims_runtimes | split(',') }}"
@@ -221,15 +285,20 @@
 - name: Download runsc for gvisor
   ansible.builtin.get_url:
     dest: "{{ sysusr_prefix }}/bin/{{ item }}"
-    url: https://storage.googleapis.com/gvisor/releases/release/{{ containerd_gvisor_version }}/{{ ansible_architecture }}/{{ item }}
+    url: https://storage.googleapis.com/gvisor/releases/release/{{ containerd_gvisor_version }}/{{ ansible_facts['architecture'] }}/{{ item }}
     mode: "0755"
     owner: root
     group: root
-    checksum: sha512:https://storage.googleapis.com/gvisor/releases/release/{{ containerd_gvisor_version }}/{{ ansible_architecture }}/{{ item }}.sha512
+    checksum: >-
+      sha512:https://storage.googleapis.com/gvisor/releases/release/{{ containerd_gvisor_version }}/{{ ansible_facts['architecture'] }}/{{ item }}.sha512
   loop:
     - runsc
     - containerd-shim-runsc-v1
   when: containerd_gvisor_runtime | bool
+  register: containerd_gvisor_download
+  until: containerd_gvisor_download is not failed
+  retries: 5
+  delay: 3
 
 - name: Install runsc as a runtime
   ansible.builtin.command:

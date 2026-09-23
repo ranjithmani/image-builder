@@ -1,4 +1,5 @@
 {
-  "containerd_sha256": "b2d4e44946e55a10835a327cbd98c0c2063011bbdebb95ef8c5e5677312f1d29",
-  "containerd_version": "1.7.25"
+  "containerd_image_pull_progress_timeout": null,
+  "containerd_sha256": "bf562d89874b2850b0aaa9934135f297b4a0b028312aa5f46d1871b3f907fb0c",
+  "containerd_version": "2.3.2"
 }

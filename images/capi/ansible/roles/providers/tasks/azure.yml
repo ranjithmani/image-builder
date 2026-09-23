@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-- ansible.builtin.import_tasks: azurecli.yml
+- name: Import Azure CLI tasks
+  ansible.builtin.import_tasks: azurecli.yml
   when: debug_tools | bool
 
 - name: Configure PTP
@@ -22,7 +23,10 @@
     line: refclock PHC /dev/ptp0 poll 3 dpoll -2 offset 0
     mode: "0644"
   # Flatcar now includes this by default as of 3975.2.0 which causes this task to fail
-  when: ansible_os_family != "Flatcar" or (ansible_os_family == "Flatcar" and  ansible_distribution_version is version('3975.2.0', '<'))
+  when: >
+    ansible_facts['os_family'] != "Flatcar" or
+    (ansible_facts['os_family'] == "Flatcar" and
+    ansible_facts['distribution_version'] is version('3975.2.0', '<'))
 
 - name: Ensure makestep parameter set as per Azure recommendation
   ansible.builtin.lineinfile:
@@ -30,17 +34,25 @@
     regexp: ^makestep
     line: makestep 1.0 -1
   # Flatcar now includes this by default as of 3975.2.0 which causes this task to fail
-  when: ansible_os_family != "Flatcar" or (ansible_os_family == "Flatcar" and  ansible_distribution_version is version('3975.2.0', '<'))
+  when: >
+    ansible_facts['os_family'] != "Flatcar" or
+    (ansible_facts['os_family'] == "Flatcar" and
+    ansible_facts['distribution_version'] is version('3975.2.0', '<'))
 
 - name: Install iptables persistence
   ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
     force_apt_get: true
+    lock_timeout: 300
   vars:
     packages:
       - iptables-persistent
-  when: ansible_os_family == "Debian"
+  register: providers_azure_iptables_status
+  until: providers_azure_iptables_status is not failed
+  retries: 5
+  delay: 10
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Block traffic to 168.63.129.16 port 80 for cve-2021-27075
   ansible.builtin.copy:
@@ -49,24 +61,29 @@
     owner: root
     group: root
     mode: "0644"
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Load iptable rules from file
   community.general.iptables_state:
     state: restored
     path: /etc/iptables/rules.v4
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Install netbase and nfs-common
   ansible.builtin.apt:
     name: "{{ packages }}"
     state: present
     force_apt_get: true
+    lock_timeout: 300
   vars:
     packages:
       - netbase
       - nfs-common
-  when: ansible_os_family == "Debian"
+  register: providers_azure_base_packages_status
+  until: providers_azure_base_packages_status is not failed
+  retries: 5
+  delay: 10
+  when: ansible_facts['os_family'] == "Debian"
 
 ## refer to ../files/etc/cloud/cloud.cfg.d/15_azure-vnet.cfg
 ## for more context on below file addition
@@ -77,7 +94,7 @@
     owner: root
     group: root
     mode: "0644"
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Create the credential provider path
   ansible.builtin.file:
@@ -90,9 +107,11 @@
     url: https://github.com/kubernetes-sigs/cloud-provider-azure/releases/latest/download/azure-acr-credential-provider-linux-amd64
     dest: /var/lib/kubelet/credential-provider/acr-credential-provider
     mode: "0755"
+    timeout: 120
 
 - name: Download OOT credential provider config file
   ansible.builtin.get_url:
     url: https://raw.githubusercontent.com/kubernetes-sigs/cloud-provider-azure/master/examples/out-of-tree/credential-provider-config.yaml
     dest: /var/lib/kubelet/credential-provider-config.yaml
     mode: "0644"
+    timeout: 120

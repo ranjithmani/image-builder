@@ -1,8 +1,82 @@
 command:
 {{ if ne .Vars.OS "windows" }} # Linux Only
-  containerd --version | awk -F' ' '{print substr($3,2); }':
+{{if eq .Vars.immutable_data_partition "true"}}
+  test "$(blkid -s LABEL -o value "$(findmnt -n --target "{{.Vars.immutable_data_partition_mount}}" --output SOURCE)")" = "{{.Vars.immutable_data_partition_label}}" && test "$(findmnt -n --target "{{.Vars.immutable_data_partition_mount}}" --output FSTYPE)" = "{{.Vars.immutable_data_partition_fstype}}":
     exit-status: 0
     stdout: []
+    stderr: []
+    timeout: 0
+  awk '$1 == "LABEL={{.Vars.immutable_data_partition_label}}" && $2 == "{{.Vars.immutable_data_partition_mount}}" && $3 == "{{.Vars.immutable_data_partition_fstype}}" && $4 == "{{.Vars.immutable_data_partition_mount_options}}" { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab:
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+  test -w "{{.Vars.immutable_data_partition_mount}}":
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+{{end}}
+{{if eq .Vars.immutable_read_only_root "true"}}
+  awk '$2 == "/" && $4 ~ /(^|,)ro(,|$)/ { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab:
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+{{end}}
+{{if ne .Vars.immutable_persistent_paths ""}}
+  immutable persistent paths are writable bind mounts:
+    exec: |
+      set -eu
+      printf '%s\n' '{{.Vars.immutable_persistent_paths}}' | tr ',' '\n' | while IFS= read -r path; do
+        [ -n "${path}" ] || continue
+        test -d "${path}"
+        test -w "${path}"
+        options="$(findmnt -n --target "${path}" --output OPTIONS)"
+        case ",${options}," in
+          *,rw,*) ;;
+          *) exit 1 ;;
+        esac
+        awk -v target="${path}" -v mount="{{.Vars.immutable_data_partition_mount}}" \
+          '$2 == target && $3 == "none" && $4 ~ /(^|,)bind(,|$)/ && $4 !~ /(^|,)nofail(,|$)/ && $4 ~ "x-systemd.requires-mounts-for=" mount { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab
+      done
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+  immutable runtime services wait for writable mounts:
+    exec: |
+      set -eu
+      for service in cloud-init-local.service cloud-init.service cloud-config.service cloud-final.service containerd.service kubelet.service ssh.service sshd.service; do
+        dropin="/etc/systemd/system/${service}.d/10-immutable-runtime-mounts.conf"
+        test -f "${dropin}"
+        grep -F "RequiresMountsFor=" "${dropin}" >/dev/null
+      done
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+{{end}}
+{{if ne .Vars.immutable_tmpfs_paths ""}}
+  immutable tmpfs paths are mounted and writable:
+    exec: |
+      set -eu
+      printf '%s\n' '{{.Vars.immutable_tmpfs_paths}}' | tr ',' '\n' | while IFS= read -r path; do
+        [ -n "${path}" ] || continue
+        test -d "${path}"
+        test -w "${path}"
+        test "$(findmnt -n --target "${path}" --output FSTYPE)" = "tmpfs"
+        awk -v target="${path}" '$1 == "tmpfs" && $2 == target && $3 == "tmpfs" { found = 1 } END { exit found ? 0 : 1 }' /etc/fstab
+      done
+    exit-status: 0
+    stdout: []
+    stderr: []
+    timeout: 0
+{{end}}
+  PATH=/opt/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin containerd --version | awk -F' ' '{print substr($3,2); }':
+    exit-status: 0
+    stdout:
+    - "{{.Vars.containerd_version}}"
     stderr: []
     timeout: 0
   crictl ps:
@@ -10,27 +84,42 @@ command:
     stdout: []
     stderr: []
     timeout: 0
-{{if ne .Vars.containerd_wasm_shims_runtimes ""}}
+{{if and (semverCompare ">=2.0.0" .Vars.containerd_version) (ne .Vars.containerd_image_pull_progress_timeout "")}}
+  grep -E 'image_pull_progress_timeout = "{{.Vars.containerd_image_pull_progress_timeout}}"' /etc/containerd/config.toml:
+    exit-status: 0
+    stdout: [ ]
+    stderr: [ ]
+    timeout: 0
+{{end}}
+{{if contains "lunatic" .Vars.containerd_wasm_shims_runtimes}}
   containerd-shim-lunatic-v1:
     exit-status: 1
     stdout: [ ]
     stderr: ["io.containerd.lunatic.v1: InvalidArgument(\"Shim namespace cannot be empty\")"]
     timeout: 0
+{{end}}
+{{if contains "slight" .Vars.containerd_wasm_shims_runtimes}}
   containerd-shim-slight-v1:
     exit-status: 1
     stdout: [ ]
     stderr: ["io.containerd.slight.v1: InvalidArgument(\"Shim namespace cannot be empty\")"]
     timeout: 0
+{{end}}
+{{if contains "spin" .Vars.containerd_wasm_shims_runtimes}}
   containerd-shim-spin-v2:
     exit-status: 1
     stdout: [ ]
     stderr: ["io.containerd.spin.v2: InvalidArgument(\"Shim namespace cannot be empty\")"]
     timeout: 0
+{{end}}
+{{if contains "wws" .Vars.containerd_wasm_shims_runtimes}}
   containerd-shim-wws-v1:
     exit-status: 1
     stdout: [ ]
     stderr: ["io.containerd.wws.v1: InvalidArgument(\"Shim namespace cannot be empty\")"]
     timeout: 0
+{{end}}
+{{if ne .Vars.containerd_wasm_shims_runtimes ""}}
   grep -E 'io\.containerd\.(lunatic|slight|spin|wws)\.v' /etc/containerd/config.toml:
     exit-status: 0
     stdout: [ ]
@@ -190,25 +279,73 @@ command:
     - "{{.Vars.containerd_version}}"
     timeout: 30000
   {{ if (semverCompare ">=2.0.0" .Vars.containerd_version) }}
-  Correct Containerd config:
-    exec: "\"/Program Files/containerd/containerd.exe\" config dump"
+  Correct Containerd sandbox config:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'sandbox = \\\"{{.Vars.pause_image}}\\\"'\""
     exit-status: 0
     stdout:
     - "sandbox = \"{{.Vars.pause_image}}\""
+    timeout: 30000
+  {{ if ne .Vars.containerd_image_pull_progress_timeout "" }}
+  Correct Containerd image pull timeout config:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'image_pull_progress_timeout = \\\"{{.Vars.containerd_image_pull_progress_timeout}}\\\"'\""
+    exit-status: 0
+    stdout:
+    - "image_pull_progress_timeout = \"{{.Vars.containerd_image_pull_progress_timeout}}\""
+    timeout: 30000
+  {{ end }}
+  Correct Containerd CNI conf_dir:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'conf_dir = \\\"C:/etc/cni/net.d\\\"'\""
+    exit-status: 0
+    stdout:
     - "conf_dir = \"C:/etc/cni/net.d\""
+    timeout: 30000
+  Correct Containerd CNI bin_dir:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'bin_dir = \\\"C:/opt/cni/bin\\\"'\""
+    exit-status: 0
+    stdout:
     - "bin_dir = \"C:/opt/cni/bin\""
+    timeout: 30000
+  Correct Containerd root:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'root = \\\"C:\\\\ProgramData\\\\containerd\\\\root\\\"'\""
+    exit-status: 0
+    stdout:
     - "root = \"C:\\\\ProgramData\\\\containerd\\\\root\""
+    timeout: 30000
+  Correct Containerd state:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'state = \\\"C:\\\\ProgramData\\\\containerd\\\\state\\\"'\""
+    exit-status: 0
+    stdout:
     - "state = \"C:\\\\ProgramData\\\\containerd\\\\state\""
     timeout: 30000
   {{ else }}
-  Correct Containerd config:
-    exec: "\"/Program Files/containerd/containerd.exe\" config dump"
+  Correct Containerd sandbox config:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'sandbox_image = \\\"{{.Vars.pause_image}}\\\"'\""
     exit-status: 0
     stdout:
     - "sandbox_image = \"{{.Vars.pause_image}}\""
+    timeout: 30000
+  Correct Containerd CNI conf_dir:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'conf_dir = \\\"C:/etc/cni/net.d\\\"'\""
+    exit-status: 0
+    stdout:
     - "conf_dir = \"C:/etc/cni/net.d\""
+    timeout: 30000
+  Correct Containerd CNI bin_dir:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'bin_dir = \\\"C:/opt/cni/bin\\\"'\""
+    exit-status: 0
+    stdout:
     - "bin_dir = \"C:/opt/cni/bin\""
+    timeout: 30000
+  Correct Containerd root:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'root = \\\"C:\\\\ProgramData\\\\containerd\\\\root\\\"'\""
+    exit-status: 0
+    stdout:
     - "root = \"C:\\\\ProgramData\\\\containerd\\\\root\""
+    timeout: 30000
+  Correct Containerd state:
+    exec: "powershell -command \"Get-Content 'C:\\Program Files\\containerd\\config.toml' | Select-String -SimpleMatch 'state = \\\"C:\\\\ProgramData\\\\containerd\\\\state\\\"'\""
+    exit-status: 0
+    stdout:
     - "state = \"C:\\\\ProgramData\\\\containerd\\\\state\""
     timeout: 30000
   {{ end }}

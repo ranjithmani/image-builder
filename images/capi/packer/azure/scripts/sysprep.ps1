@@ -16,10 +16,23 @@
 # The Windows Azure Guest Agent is required for sysprep: https://www.packer.io/docs/builders/azure/arm#windows
 Write-Output '>>> Waiting for GA Service (RdAgent) to start ...'
 while ((Get-Service RdAgent).Status -ne 'Running') { Start-Sleep -s 5 }
-Write-Output '>>> Waiting for GA Service (WindowsAzureTelemetryService) to start ...'
-while ((Get-Service WindowsAzureTelemetryService) -and ((Get-Service WindowsAzureTelemetryService).Status -ne 'Running')) { Start-Sleep -s 5 }
+$telemetryService = Get-Service WindowsAzureTelemetryService -ErrorAction SilentlyContinue
+if ($telemetryService) {
+  Write-Output '>>> Waiting for GA Service (WindowsAzureTelemetryService) to start ...'
+  while ($telemetryService.Status -ne 'Running') { Start-Sleep -s 5; $telemetryService.Refresh() }
+} else {
+  Write-Output '>>> GA Service (WindowsAzureTelemetryService) not installed, skipping ...'
+}
 Write-Output '>>> Waiting for GA Service (WindowsAzureGuestAgent) to start ...'
 while ((Get-Service WindowsAzureGuestAgent).Status -ne 'Running') { Start-Sleep -s 5 }
+# Sysprep leaves the built-in Administrator flagged "must change password at next
+# logon", which hangs Azure first-boot OOBE and causes intermittent
+# OSProvisioningTimedOut. Disable it (its normal Azure state) and stop the packer
+# user's password expiring during a slow validation.
+Write-Output '>>> Preparing built-in accounts for generalize ...'
+net accounts /maxpwage:unlimited
+Disable-LocalUser -Name Administrator -ErrorAction SilentlyContinue
+
 Write-Output '>>> Sysprepping VM ...'
 if( Test-Path $Env:SystemRoot\system32\Sysprep\unattend.xml ) {
   Remove-Item $Env:SystemRoot\system32\Sysprep\unattend.xml -Force

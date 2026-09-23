@@ -18,8 +18,12 @@
     checksum: sha256:{{ crictl_url }}.sha256
     dest: /tmp/{{ crictl_filename }}
     mode: "0600"
+  register: crictl_download
+  until: crictl_download is not failed
+  retries: 5
+  delay: 3
 
-- name: Create "{{ sysusrlocal_prefix }}/bin" directory
+- name: Create crictl bin directory
   ansible.builtin.file:
     state: directory
     path: "{{ sysusrlocal_prefix }}/bin"
@@ -32,6 +36,9 @@
     remote_src: true
     src: /tmp/{{ crictl_filename }}
     dest: "{{ sysusrlocal_prefix }}/bin"
+    owner: root
+    group: root
+    mode: "0755"
     extra_opts:
       - --no-overwrite-dir
 

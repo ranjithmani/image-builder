@@ -15,16 +15,30 @@
 ---
 
 - name: Install Falco on Debian based systems
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
   block:
-    - name: Add Falco package signing key
-      ansible.builtin.apt_key:
+    - name: Ensure /etc/apt/keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Falco package signing key (armored)
+      ansible.builtin.get_url:
         url: https://falco.org/repo/falcosecurity-packages.asc
-        state: present
+        dest: /etc/apt/keyrings/falcosecurity.asc
+        mode: "0644"
+
+    - name: Dearmor Falco package signing key
+      ansible.builtin.shell: >
+        gpg --dearmor < /etc/apt/keyrings/falcosecurity.asc
+        > /etc/apt/keyrings/falcosecurity.gpg
+      args:
+        creates: /etc/apt/keyrings/falcosecurity.gpg
 
     - name: Add Falco apt repo
       ansible.builtin.apt_repository:
-        repo: deb https://download.falco.org/packages/deb stable main
+        repo: deb [signed-by=/etc/apt/keyrings/falcosecurity.gpg] https://download.falco.org/packages/deb stable main
         state: present
         filename: falcosecurity
 
@@ -33,7 +47,7 @@
         pkg:
           - dkms
           - make
-          - "linux-headers-{{ ansible_kernel }}"
+          - "linux-headers-{{ ansible_facts['kernel'] }}"
           - clang
           - llvm
         update_cache: true
@@ -43,7 +57,7 @@
       until: pkg_result is success
 
 - name: Install Falco on RedHat based systems
-  when: ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat"
   block:
     - name: Add Falco YUM repo
       ansible.builtin.yum_repository:
@@ -60,7 +74,7 @@
         pkg:
           - dkms
           - make
-          - "kernel-devel-{{ ansible_kernel }}"
+          - "kernel-devel-{{ ansible_facts['kernel'] }}"
           - clang
           - llvm
           - dialog
@@ -73,11 +87,11 @@
   ansible.builtin.package:
     name: falco
     state: present
-  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "Debian" or ansible_facts['os_family'] == "RedHat"
 
 - name: Enable Falco Modern eBPF
   ansible.builtin.service:
     name: falco-modern-bpf
     state: started
     enabled: true
-  when: ansible_os_family == "Debian" or ansible_os_family == "RedHat"
+  when: ansible_facts['os_family'] == "Debian" or ansible_facts['os_family'] == "RedHat"

@@ -29,16 +29,10 @@ CAPI_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 cd "${CAPI_ROOT}" || exit 1
 
 export ARTIFACTS="${ARTIFACTS:-${PWD}/_artifacts}"
-mkdir -p "${ARTIFACTS}/azure-sigs" "${ARTIFACTS}/azure-vhds"
+mkdir -p "${ARTIFACTS}/azure-sigs"
 
 # Dynamically gets all targets and filters out the following:
 # - Any RHEL targets (because of subscription requirements)
-VHD_CI_TARGETS=( $(make build-azure-vhds --recon -d | grep "Must remake" | \
-  grep -v build-azure-vhds | grep -v deps- | \
-  grep -v gen2 | grep -v cvm | \
-  grep -E -v 'rhel' | \
-  grep -E -o 'build-azure-vhd-[a-zA-Z0-9\-]+' | \
-  sed -E 's/build-azure-vhd-([0-9a-z\-]*)/\1/' ) )
 SIG_CI_TARGETS=( $(make build-azure-sigs --recon -d | grep "Must remake" | \
   grep -v build-azure-sigs | grep -v deps- | \
   grep -v cvm | \
@@ -66,17 +60,28 @@ fi
 set -o nounset
 
 get_random_region() {
-    local REGIONS=("australiaeast" "canadacentral" "eastus" "eastus2" "northcentralus" "northeurope" "uksouth" "westeurope" "westus2")
+    # Regions appear more than once to represent the approximate relative amount
+    # of Standard BS v2 quota in each region.
+    local REGIONS=(
+      "australiaeast"
+      "canadacentral" "canadacentral" "canadacentral"
+      "francecentral"
+      "germanywestcentral"
+      "switzerlandnorth" "switzerlandnorth" "switzerlandnorth"
+      "uksouth"
+    )
     echo "${REGIONS[${RANDOM} % ${#REGIONS[@]}]}"
 }
 
-export VALID_CVM_LOCATIONS=("eastus" "northeurope" "westeurope" "westus")
+export VALID_CVM_LOCATIONS=("eastus" "germanywestcentral" "northeurope" "switzerlandnorth" "uksouth" "westeurope" "westus")
 get_random_cvm_region() {
     echo "${VALID_CVM_LOCATIONS[${RANDOM} % ${#VALID_CVM_LOCATIONS[@]}]}"
 }
 
 export PATH=${PWD}/.local/bin:$PATH
 export PATH=${PYTHON_BIN_DIR:-"/root/.local/bin"}:$PATH
+export AZURE_CONFIG_DIR="${AZURE_CONFIG_DIR:-${ARTIFACTS}/azure-cli/main}"
+mkdir -p "${AZURE_CONFIG_DIR}"
 
 export AZURE_LOCATION="${AZURE_LOCATION:-$(get_random_region)}"
 export RESOURCE_GROUP_NAME="image-builder-e2e-$(head /dev/urandom | LC_ALL=C tr -dc a-z0-9 | head -c 6 ; echo '')"
@@ -112,44 +117,63 @@ export FLATCAR_VERSION="$(get_flatcar_version)"
 
 # Pre-pulling windows images takes 10-20 mins
 # Disable them for CI runs so don't run into timeouts
-export PACKER_VAR_FILES="packer/azure/scripts/disable-windows-prepull.json scripts/ci-disable-goss-inspect.json"
+export PACKER_VAR_FILES="packer/azure/scripts/disable-windows-prepull.json packer/azure/scripts/disable-windows-debug-tools.json scripts/ci-disable-goss-inspect.json"
+
+run_sig_target() {
+    local target="$1"
+    local location="${2:-${AZURE_LOCATION}}"
+
+    export AZURE_CONFIG_DIR="${ARTIFACTS}/azure-cli/${target}"
+    export AZURE_LOCATION="${location}"
+    mkdir -p "${AZURE_CONFIG_DIR}"
+
+    login
+
+    # Shared Image Gallery replication occasionally fails with a transient
+    # storage allocation error in the target region. Retry a couple of times
+    # before giving up, since re-running the same build usually succeeds.
+    local attempt attempt_log
+    attempt_log="$(mktemp)"
+    for attempt in 1 2 3; do
+      if make "build-azure-sig-${target}" 2>&1 | tee "${attempt_log}"; then
+        rm -f "${attempt_log}"
+        return 0
+      fi
+      if ! grep -q "Storage allocation failure" "${attempt_log}"; then
+        rm -f "${attempt_log}"
+        return 1
+      fi
+      echo "build-azure-sig-${target}: retrying after transient SIG replication storage allocation failure (attempt ${attempt}/3)"
+    done
+    rm -f "${attempt_log}"
+    return 1
+}
 
 declare -A PIDS
-if [[ "${AZURE_BUILD_FORMAT:-vhd}" == "sig" ]]; then
-    for target in ${SIG_CI_TARGETS[@]};
-    do
-        login
-        make build-azure-sig-${target} > ${ARTIFACTS}/azure-sigs/${target}.log 2>&1 &
-        PIDS["sig-${target}"]=$!
-    done
+for target in "${SIG_CI_TARGETS[@]}";
+do
+    run_sig_target "${target}" > "${ARTIFACTS}/azure-sigs/${target}.log" 2>&1 &
+    PIDS["sig-${target}"]=$!
+done
 
-    SELECTED_LOCATION="${AZURE_LOCATION}"
-    if [[ ! " ${VALID_CVM_LOCATIONS[*]} " =~ " ${SELECTED_LOCATION} " ]]; then
-        SELECTED_LOCATION="$(get_random_cvm_region)"
-        echo "AZURE_LOCATION=${AZURE_LOCATION} is invalid for Confidential VM targets. Valid CVM locations: ${VALID_CVM_LOCATIONS[*]}."
-        echo "Selected location is ${SELECTED_LOCATION}."
-    fi
-
-    for target in ${SIG_CVM_CI_TARGETS[@]};
-    do
-        login
-        AZURE_LOCATION="${SELECTED_LOCATION}" make build-azure-sig-${target} > ${ARTIFACTS}/azure-sigs/${target}.log 2>&1 &
-        PIDS["sig-${target}"]=$!
-    done
-else
-    for target in ${VHD_CI_TARGETS[@]};
-    do
-        make build-azure-vhd-${target} > ${ARTIFACTS}/azure-vhds/${target}.log 2>&1 &
-        PIDS["vhd-${target}"]=$!
-    done
+SELECTED_LOCATION="${AZURE_LOCATION}"
+if [[ ! " ${VALID_CVM_LOCATIONS[*]} " =~ " ${SELECTED_LOCATION} " ]]; then
+    SELECTED_LOCATION="$(get_random_cvm_region)"
+    echo "AZURE_LOCATION=${AZURE_LOCATION} is invalid for Confidential VM targets. Valid CVM locations: ${VALID_CVM_LOCATIONS[*]}."
+    echo "Selected location is ${SELECTED_LOCATION}."
 fi
+
+for target in "${SIG_CVM_CI_TARGETS[@]}";
+do
+    run_sig_target "${target}" "${SELECTED_LOCATION}" > "${ARTIFACTS}/azure-sigs/${target}.log" 2>&1 &
+    PIDS["sig-${target}"]=$!
+done
 
 # need to unset errexit so that failed child tasks don't cause script to exit
 set +o errexit
 exit_err=false
 for target in "${!PIDS[@]}"; do
-  wait ${PIDS[$target]}
-  if [[ $? -ne 0 ]]; then
+  if ! wait "${PIDS[$target]}"; then
     exit_err=true
     echo "${target}: FAILED. See logs in the artifacts folder."
   else

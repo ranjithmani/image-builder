@@ -26,7 +26,6 @@ the different operating systems.
 
 | File | Description |
 |------|-------------|
-| `oracle-linux-8.json` | The settings for the Oracle Linux 8 image |
 | `oracle-linux-9.json` | The settings for the Oracle Linux 9 image |
 | `ubuntu-2204.json` | The settings for the Ubuntu 22.04 image |
 | `windows-2019.json` | The settings for the Windows Server 2019 image |
@@ -46,6 +45,7 @@ list, and greater explanation can be found in the
 | `subnet_ocid` |  The OCID of the subnet within which a new instance is launched and provisioned. |  | Yes |
 | `availability_domain` | The name of the Availability Domain within which a new instance is launched and provisioned. The names of the Availability Domains have a prefix that is specific to your tenancy. |  | Yes |
 | `shape` | An OCI region. Overrides value provided by the OCI config file if present. This cannot be used along with the use_instance_principals key. | `VM.Standard.E4.Flex` | No |
+| `instance_options_are_legacy_imds_endpoints_disabled` | Whether to disable legacy IMDS endpoints on launched build instances. | `true` | No |
 
 #### Steps to create Packer VAR file
 
@@ -62,7 +62,7 @@ Create a file with the following contents and name it as `oci.json`
 #### Example make command with Packer VAR file
 
 ```bash
-PACKER_VAR_FILES=oci.json make build-oci-oracle-linux-8
+PACKER_VAR_FILES=oci.json make build-oci-oracle-linux-9
 ```
 
 #### Build an Arm based image

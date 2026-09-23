@@ -13,10 +13,27 @@
 # limitations under the License.
 
 ---
-- name: Add NVIDIA package signing key
-  ansible.builtin.apt_key:
+- name: Ensure /etc/apt/keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Download NVIDIA package signing key (armored)
+  ansible.builtin.get_url:
     url: https://nvidia.github.io/libnvidia-container/gpgkey
-  when: ansible_os_family == "Debian"
+    dest: /etc/apt/keyrings/nvidia.asc
+    mode: "0644"
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Dearmor NVIDIA package signing key
+  ansible.builtin.shell: >
+    gpg --dearmor < /etc/apt/keyrings/nvidia.asc
+    > /etc/apt/keyrings/nvidia.gpg
+  args:
+    creates: /etc/apt/keyrings/nvidia.gpg
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Perform a cache update
   ansible.builtin.apt:
@@ -26,7 +43,7 @@
   until: apt_lock_status is not failed
   retries: 5
   delay: 10
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Install packages for building NVIDIA driver kernel module and interacting with s3 endpoint
   become: true
@@ -37,7 +54,7 @@
       - dkms
       - python3-boto3
       - python3-botocore
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Make /etc/nvidia/ClientConfigToken directory
   become: true
@@ -119,4 +136,4 @@
     pkg:
       - python3-boto3
       - python3-botocore
-  when: ansible_os_family == "Debian"
+  when: ansible_facts['os_family'] == "Debian"

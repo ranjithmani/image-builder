@@ -12,7 +12,7 @@
         "{{user `cd_files`}}"
       ],
       "cd_label": "cidata",
-      "cpu_model": "host",
+      "cpu_model": "{{user `cpu_model`}}",
       "cpus": "{{user `cpus`}}",
       "disk_compression": "{{ user `disk_compression`}}",
       "disk_discard": "{{user `disk_discard`}}",
@@ -25,6 +25,7 @@
       "http_directory": "{{user `http_directory`}}",
       "iso_checksum": "{{user `iso_checksum_type`}}:{{user `iso_checksum`}}",
       "iso_url": "{{user `iso_url`}}",
+      "machine_type": "{{user `machine_type`}}",
       "memory": "{{user `memory`}}",
       "net_device": "virtio-net",
       "output_directory": "{{user `output_directory`}}",
@@ -79,6 +80,8 @@
     {
       "ansible_env_vars": [
         "ANSIBLE_SSH_ARGS='{{user `existing_ansible_ssh_args`}} {{user `ansible_common_ssh_args`}}'",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATH={{user `ansible_collections_path`}}{{end}}",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATHS={{user `ansible_collections_path`}}{{end}}",
         "KUBEVIRT={{user `kubevirt`}}"
       ],
       "extra_arguments": [
@@ -91,6 +94,7 @@
         "--scp-extra-args",
         "{{user `ansible_scp_extra_args`}}"
       ],
+      "max_retries": 5,
       "playbook_file": "./ansible/firstboot.yml",
       "type": "ansible",
       "user": "builder"
@@ -101,12 +105,27 @@
         "sudo reboot now"
       ],
       "inline_shebang": "/bin/bash -e",
+      "skip_clean": true,
       "type": "shell"
     },
     {
-      "pause_before": "30s",
+      "inline": [
+        "echo \"Post-reboot SSH ready at $(date -Is)\"",
+        "echo 'Waiting for rebooted systemd state to settle...'",
+        "if ! timeout 180s sudo systemctl is-system-running --wait; then sudo systemctl --failed --no-pager || true; fi",
+        "uname -a"
+      ],
+      "inline_shebang": "/bin/bash -e",
+      "pause_before": "60s",
+      "skip_clean": true,
+      "start_retry_timeout": "10m",
+      "type": "shell"
+    },
+    {
       "ansible_env_vars": [
         "ANSIBLE_SSH_ARGS='{{user `existing_ansible_ssh_args`}} {{user `ansible_common_ssh_args`}}'",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATH={{user `ansible_collections_path`}}{{end}}",
+        "{{if user `ansible_collections_path`}}ANSIBLE_COLLECTIONS_PATHS={{user `ansible_collections_path`}}{{end}}",
         "KUBEVIRT={{user `kubevirt`}}"
       ],
       "extra_arguments": [
@@ -119,9 +138,35 @@
         "--scp-extra-args",
         "{{user `ansible_scp_extra_args`}}"
       ],
+      "max_retries": 5,
       "playbook_file": "./ansible/node.yml",
       "type": "ansible",
       "user": "builder"
+    },
+    {
+      "environment_vars": [
+        "IMMUTABLE_DATA_PARTITION={{user `immutable_data_partition`}}",
+        "IMMUTABLE_READ_ONLY_ROOT={{user `immutable_read_only_root`}}",
+        "IMMUTABLE_PERSISTENT_PATHS={{user `immutable_persistent_paths`}}"
+      ],
+      "execute_command": "sudo {{.Vars}} -S -E bash '{{.Path}}'",
+      "script": "./packer/qemu/scripts/stop_immutable_runtime_services.sh",
+      "type": "shell"
+    },
+    {
+      "environment_vars": [
+        "IMMUTABLE_DATA_PARTITION={{user `immutable_data_partition`}}",
+        "IMMUTABLE_DATA_PARTITION_FSTYPE={{user `immutable_data_partition_fstype`}}",
+        "IMMUTABLE_DATA_PARTITION_LABEL={{user `immutable_data_partition_label`}}",
+        "IMMUTABLE_DATA_PARTITION_MOUNT={{user `immutable_data_partition_mount`}}",
+        "IMMUTABLE_DATA_PARTITION_MOUNT_OPTIONS={{user `immutable_data_partition_mount_options`}}",
+        "IMMUTABLE_PERSISTENT_PATHS={{user `immutable_persistent_paths`}}",
+        "IMMUTABLE_READ_ONLY_ROOT={{user `immutable_read_only_root`}}",
+        "IMMUTABLE_TMPFS_PATHS={{user `immutable_tmpfs_paths`}}"
+      ],
+      "execute_command": "sudo {{.Vars}} -S -E bash '{{.Path}}'",
+      "script": "./packer/qemu/scripts/configure_immutable_runtime.sh",
+      "type": "shell"
     },
     {
       "arch": "{{user `goss_arch`}}",
@@ -141,12 +186,22 @@
         "OS": "{{user `distro_name` | lower}}",
         "OS_VERSION": "{{user `distribution_version` | lower}}",
         "PROVIDER": "qemu",
+        "containerd_enable_limit_no_file": "{{user `containerd_enable_limit_no_file`}}",
+        "containerd_image_pull_progress_timeout": "{{user `containerd_image_pull_progress_timeout`}}",
         "containerd_version": "{{user `containerd_version`}}",
         "kubernetes_cni_deb_version": "{{ user `kubernetes_cni_deb_version` }}",
         "kubernetes_cni_rpm_version": "{{ split (user `kubernetes_cni_rpm_version`) \"-\" 0 }}",
         "kubernetes_cni_source_type": "{{user `kubernetes_cni_source_type`}}",
         "kubernetes_cni_version": "{{user `kubernetes_cni_semver` | replace \"v\" \"\" 1}}",
         "kubernetes_deb_version": "{{ user `kubernetes_deb_version` }}",
+        "immutable_data_partition": "{{user `immutable_data_partition`}}",
+        "immutable_data_partition_fstype": "{{user `immutable_data_partition_fstype`}}",
+        "immutable_data_partition_label": "{{user `immutable_data_partition_label`}}",
+        "immutable_data_partition_mount": "{{user `immutable_data_partition_mount`}}",
+        "immutable_data_partition_mount_options": "{{user `immutable_data_partition_mount_options`}}",
+        "immutable_persistent_paths": "{{user `immutable_persistent_paths`}}",
+        "immutable_read_only_root": "{{user `immutable_read_only_root`}}",
+        "immutable_tmpfs_paths": "{{user `immutable_tmpfs_paths`}}",
         "kubernetes_rpm_version": "{{ split (user `kubernetes_rpm_version`) \"-\" 0  }}",
         "kubernetes_source_type": "{{user `kubernetes_source_type`}}",
         "kubernetes_version": "{{user `kubernetes_semver` | replace \"v\" \"\" 1}}"
@@ -154,26 +209,27 @@
       "version": "{{user `goss_version`}}"
     },
     {
-        "type": "shell",
-        "environment_vars": [
-          "REMOVE_NAMESERVER={{user `remove_nameserver`}}"
-        ],
-        "inline": [
-          "if [ \"$REMOVE_NAMESERVER\" = \"true\" ]; then",
-          "  cat /etc/resolv.conf",
-          "  echo 'Removing nameserver from resolv.conf...'",
-          "  sudo sed -i '/^nameserver/d' /etc/resolv.conf",
-          "  echo 'Removing stale nameserver is done, checking the current content of /etc/resolv.conf...'",
-          "  cat /etc/resolv.conf",
-          "else",
-          "  echo 'Skipping nameserver cleanup.'",
-          "fi"
-        ]
+      "environment_vars": [
+        "REMOVE_NAMESERVER={{user `remove_nameserver`}}"
+      ],
+      "inline": [
+        "if [ \"$REMOVE_NAMESERVER\" = \"true\" ]; then",
+        "  cat /etc/resolv.conf",
+        "  echo 'Removing nameserver from resolv.conf...'",
+        "  sudo sed -i '/^nameserver/d' /etc/resolv.conf",
+        "  echo 'Removing stale nameserver is done, checking the current content of /etc/resolv.conf...'",
+        "  cat /etc/resolv.conf",
+        "else",
+        "  echo 'Skipping nameserver cleanup.'",
+        "fi"
+      ],
+      "type": "shell"
     }
   ],
   "variables": {
     "accelerator": "kvm",
     "ansible_common_vars": "",
+    "ansible_collections_path": "",
     "ansible_extra_vars": "ansible_python_interpreter=/usr/bin/python3",
     "ansible_user_vars": "",
     "artifact_name": "{{user `build_name`}}-kube-{{user `kubernetes_semver`}}",
@@ -182,7 +238,10 @@
     "build_timestamp": "{{timestamp}}",
     "cd_files": "linux/base/*.nothing",
     "containerd_version": null,
-    "containerd_service_url": "https://raw.githubusercontent.com/containerd/containerd/refs/tags/v{{user `containerd_version`}}/containerd.service",
+    "containerd_image_pull_progress_timeout": null,
+    "cpu_model": "host",
+    "containerd_enable_limit_no_file": "false",
+    "containerd_service_url": "",
     "runc_version": null,
     "cpus": "1",
     "crictl_version": null,
@@ -191,10 +250,20 @@
     "disk_image": "false",
     "disk_size": "20480",
     "existing_ansible_ssh_args": "{{env `ANSIBLE_SSH_ARGS`}}",
+    "ib_version": "{{env `IB_VERSION`}}",
     "firmware": "",
     "format": "qcow2",
     "headless": "true",
     "http_directory": "./packer/qemu/linux/{{user `distro_name`}}/http/",
+    "immutable_data_partition": "false",
+    "immutable_data_partition_fstype": "ext4",
+    "immutable_data_partition_label": "CAPI-DATA",
+    "immutable_data_partition_mount": "/.capi-data",
+    "immutable_data_partition_mount_options": "defaults,x-systemd.device-timeout=30s",
+    "immutable_persistent_paths": "",
+    "immutable_read_only_root": "false",
+    "immutable_root_partition_size": "12884901888",
+    "immutable_tmpfs_paths": "",
     "kubernetes_cni_deb_version": null,
     "kubernetes_cni_http_source": null,
     "kubernetes_cni_semver": null,
@@ -213,6 +282,7 @@
     "kubernetes_series": null,
     "kubernetes_source_type": null,
     "machine_id_mode": "444",
+    "machine_type": "pc",
     "memory": "2048",
     "oem_id": "",
     "output_directory": "./output/{{user `build_name`}}-kube-{{user `kubernetes_semver`}}",

@@ -89,11 +89,23 @@ photon_5_rpms: &photon_5_rpms
   logrotate:
 
 arch: "amd64"
+ARCH: "amd64"
+containerd_enable_limit_no_file: ""
 containerd_gvisor_runtime: ""
 containerd_gvisor_version: ""
+containerd_image_pull_progress_timeout: ""
 containerd_version: ""
 containerd_wasm_shims_runtimes: ""
 extra_kernel_boot_params: ""
+image_builder_version: ""
+immutable_data_partition: "false"
+immutable_data_partition_fstype: "ext4"
+immutable_data_partition_label: "CAPI-DATA"
+immutable_data_partition_mount: "/.capi-data"
+immutable_data_partition_mount_options: "defaults,x-systemd.device-timeout=30s"
+immutable_persistent_paths: ""
+immutable_read_only_root: "false"
+immutable_tmpfs_paths: ""
 kubernetes_cni_source_type: ""
 kubernetes_cni_version: ""
 kubernetes_source_type: ""
@@ -155,7 +167,6 @@ centos:
       open-vm-tools:
   ova:
     package:
-      python2-pip:
       open-vm-tools:
   qemu:
     package:
@@ -170,7 +181,31 @@ centos:
     package:
       cloud-init:
       cloud-utils-growpart:
-      python2-pip:
+almalinux:
+  common-package: *common_rpms
+  amazon:
+    package:
+      amazon-ssm-agent:
+    command:
+      /usr/local/sbin/aws --version:
+        exit-status: 0
+        stderr: []
+        timeout: 0
+    service:
+      amazon-ssm-agent:
+        enabled: true
+        running: true
+    os_version:
+    - distro_version: "9"
+      package:
+        <<: *rh9_rpms
+  ova:
+    package:
+      open-vm-tools:
+    os_version:
+    - distro_version: "9"
+      package:
+        <<: *rh9_rpms
 flatcar:
   common-service:
     systemd-timesyncd:
@@ -189,6 +224,10 @@ flatcar:
   nutanix:
     command:
   hcloud:
+    command:
+  openstack:
+    command:
+  outscale:
     command:
 photon:
   common-service:
@@ -234,20 +273,11 @@ azurelinux:
   azure:
     package:
       open-vm-tools:
-mariner:
-  common-package: *common_azurelinux_rpms
-  azure:
-    package:
-      open-vm-tools:
 rockylinux:
   common-package: *common_rpms
   amazon:
     package:
       amazon-ssm-agent:
-    os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     command:
       /usr/local/sbin/aws --version:
         exit-status: 0
@@ -261,10 +291,6 @@ rockylinux:
     package:
       open-vm-tools:
     os_version:
-    - distro_version: "8"
-      package:
-        python2-pip:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -274,9 +300,6 @@ rockylinux:
       cloud-init:
       cloud-utils:
     os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -288,9 +311,6 @@ rockylinux:
       lvm2:
       xfsprogs:
     os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -302,10 +322,6 @@ rockylinux:
     package:
       cloud-init:
       cloud-utils-growpart:
-    os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
   openstack:
     package:
       cloud-init:
@@ -327,10 +343,6 @@ rhel:
   amazon:
     package:
       amazon-ssm-agent:
-    os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     command:
       /usr/local/sbin/aws --version:
         exit-status: 0
@@ -343,10 +355,6 @@ rhel:
   azure:
     package:
       open-vm-tools:
-    os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
   gcp:
     command:
       find -L /bin -maxdepth 1 -type f -executable -printf "%f\n" | grep -Fx 'gcloud':
@@ -354,18 +362,10 @@ rhel:
         stdout: ["gcloud"]
         stderr: []
         timeout: 0
-    os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
   ova:
     package:
       open-vm-tools:
     os_version:
-    - distro_version: "8"
-      package:
-        python2-pip:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -375,9 +375,6 @@ rhel:
       cloud-init:
       cloud-utils-growpart:
     os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -386,9 +383,6 @@ rhel:
       cloud-init:
       cloud-utils-growpart:
     os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -400,9 +394,6 @@ rhel:
       lvm2:
       xfsprogs:
     os_version:
-    - distro_version: "8"
-      package:
-        <<: *rh8_rpms
     - distro_version: "9"
       package:
         <<: *rh9_rpms
@@ -447,7 +438,8 @@ ubuntu:
       snap.amazon-ssm-agent.amazon-ssm-agent.service:
         enabled: true
         running: true
-    package:
+    package: {}
+    package-x86:
       linux-cloud-tools-virtual:
       linux-tools-virtual:
     command:
@@ -485,6 +477,29 @@ ubuntu:
         running: true
     package:
       linux-cloud-tools-virtual:
+      linux-tools-virtual:
+      open-vm-tools:
+      cloud-guest-utils:
+      cloud-initramfs-copymods:
+      cloud-initramfs-dyn-netconf:
+  maas:
+    service:
+      networkd-dispatcher:
+        enabled: true
+        running: true
+    package:
+      linux-cloud-tools-virtual:
+      linux-tools-virtual:
+      open-vm-tools:
+      cloud-guest-utils:
+      cloud-initramfs-copymods:
+      cloud-initramfs-dyn-netconf:
+  maas-arm64:
+    service:
+      networkd-dispatcher:
+        enabled: true
+        running: true
+    package:
       linux-tools-virtual:
       open-vm-tools:
       cloud-guest-utils:
@@ -546,6 +561,10 @@ ubuntu:
       cloud-initramfs-copymods:
       cloud-initramfs-dyn-netconf:
   scaleway:
+    service:
+    package:
+    command:
+  oxide:
     service:
     package:
     command:
